@@ -3,6 +3,7 @@ package com.example.stocks.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.stocks.data.repository.BazaarRepository
+import com.example.stocks.data.repository.PortfolioRepository
 import com.example.stocks.domain.model.BazaarItem
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -10,12 +11,17 @@ import kotlinx.coroutines.launch
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 class SearchViewModel(
     private val bazaarRepo: BazaarRepository,
+    private val portfolioRepo: PortfolioRepository,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
     private val _allItems = MutableStateFlow<Map<String, BazaarItem>>(emptyMap())
+
+    val followedTags: StateFlow<Set<String>> = portfolioRepo.observeWatchlist()
+        .map { list -> list.map { it.itemTag }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     val results: StateFlow<List<BazaarItem>> = _query
         .debounce(200)
@@ -33,4 +39,8 @@ class SearchViewModel(
     }
 
     fun onQueryChange(q: String) { _query.value = q }
+
+    fun toggleFollow(tag: String) = viewModelScope.launch {
+        portfolioRepo.toggleWatchlist(tag)
+    }
 }

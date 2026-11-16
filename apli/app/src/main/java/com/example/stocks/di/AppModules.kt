@@ -1,9 +1,12 @@
 package com.example.stocks.di
 
 import androidx.room.Room
+import com.example.stocks.data.local.datastore.UserPreferencesRepository
 import com.example.stocks.data.local.db.AppDatabase
 import com.example.stocks.data.remote.coflnet.CoflnetApiService
 import com.example.stocks.data.remote.hypixel.HypixelApiService
+import com.example.stocks.data.remote.mojang.MojangApiService
+import com.example.stocks.data.repository.AccountRepository
 import com.example.stocks.data.repository.BazaarRepository
 import com.example.stocks.data.repository.PortfolioRepository
 import com.example.stocks.ui.detail.ItemDetailViewModel
@@ -40,7 +43,7 @@ val networkModule = module {
             .build()
     }
 
-    // Hypixel API (no auth required for Bazaar)
+    // Hypixel API
     single<HypixelApiService> {
         Retrofit.Builder()
             .baseUrl("https://api.hypixel.net/")
@@ -50,7 +53,17 @@ val networkModule = module {
             .create(HypixelApiService::class.java)
     }
 
-    // Coflnet API (historical data)
+    // Mojang API
+    single<MojangApiService> {
+        Retrofit.Builder()
+            .baseUrl("https://api.mojang.com/")
+            .client(get())
+            .addConverterFactory(MoshiConverterFactory.create(get()))
+            .build()
+            .create(MojangApiService::class.java)
+    }
+
+    // Coflnet API
     single<CoflnetApiService> {
         Retrofit.Builder()
             .baseUrl("https://sky.coflnet.com/")
@@ -67,23 +80,28 @@ val databaseModule = module {
             androidContext(),
             AppDatabase::class.java,
             "skyblock_portfolio.db"
-        ).build()
+        )
+        .fallbackToDestructiveMigration(true)
+        .build()
     }
 
     single { get<AppDatabase>().holdingDao() }
     single { get<AppDatabase>().watchlistDao() }
+    single { get<AppDatabase>().transactionDao() }
+    single { UserPreferencesRepository(androidContext()) }
 }
 
 val repositoryModule = module {
     single { BazaarRepository(get(), get()) }
-    single { PortfolioRepository(get(), get(), get()) }
+    single { PortfolioRepository(get(), get(), get(), get()) }
+    single { AccountRepository(get(), get(), get(), get()) }
 }
 
 val viewModelModule = module {
-    viewModel { PortfolioViewModel(get()) }
-    viewModel { WatchlistViewModel(get()) }
+    viewModel { PortfolioViewModel(get(), get(), get()) }
+    viewModel { WatchlistViewModel(get(), get()) }
     viewModel { (tag: String) -> ItemDetailViewModel(tag, get(), get()) }
-    viewModel { SearchViewModel(get()) }
+    viewModel { SearchViewModel(get(), get()) }
 }
 
 val appModules = listOf(networkModule, databaseModule, repositoryModule, viewModelModule)

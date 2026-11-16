@@ -48,6 +48,24 @@ class BazaarRepository(
         return cachedItems
     }
 
+    suspend fun getItemsByTags(tags: List<String>): List<BazaarItem> {
+        val all = getAllItems()
+        return tags.mapNotNull { all[it] }
+    }
+
+    suspend fun getCuratedCategory(category: String): List<BazaarItem> {
+        val all = getAllItems()
+        val tags = when (category) {
+            "Trending" -> listOf("GLOSSY_GEMSTONE", "CONDENSED_FERMENTO", "DIVAN_FRAGMENT", "SUBZERO_INVERTER", "REFINED_MINERAL")
+            "Blue Chips" -> listOf("BOOSTER_COOKIE", "STOCK_OF_STONKS", "RECOMBOBULATOR_3000", "ENCHANTED_GOLD_BLOCK", "REFINED_TITANIUM")
+            "Gemstones" -> listOf("ROUGH_RUBY_GEM", "FLAWLESS_RUBY_GEM", "PERFECT_RUBY_GEM", "FLAWLESS_JASPER_GEM", "PERFECT_JASPER_GEM")
+            "Farming" -> listOf("ENCHANTED_SUGAR_CANE", "MUTANT_NETHER_STALK", "ENCHANTED_PUMPKIN", "ENCHANTED_CARROT", "ENCHANTED_BAKED_POTATO")
+            "Slayer" -> listOf("WARDEN_HEART", "JUDGEMENT_CORE", "TARANTULA_SILK", "NULL_ATOM", "ENCHANTED_GOLDEN_TOOTH")
+            else -> emptyList()
+        }
+        return tags.mapNotNull { all[it] }
+    }
+
     suspend fun getItem(tag: String): BazaarItem? = getAllItems()[tag]
 
     fun observeItems(): Flow<Map<String, BazaarItem>> = flow {
