@@ -3,6 +3,7 @@ package com.example.stocks.ui.detail
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.stocks.ui.components.ChangeBadge
@@ -93,12 +95,30 @@ fun ItemDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "CURRENT SELL PRICE",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            ChangeBadge(pct = state.change7dPct)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Item icon placeholder
+                                Surface(
+                                    modifier = Modifier.size(48.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            item.displayName.firstOrNull()?.toString() ?: "?",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "CURRENT SELL PRICE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            ChangeBadge(pct = state.changePct)
                         }
 
                         Spacer(Modifier.height(6.dp))
@@ -125,7 +145,7 @@ fun ItemDetailScreen(
                     }
                 }
 
-                // 7-day chart
+                // Price history chart with time range selector
                 if (state.history.isNotEmpty()) {
                     Card(
                         modifier = Modifier
@@ -135,11 +155,30 @@ fun ItemDetailScreen(
                         colors = CardDefaults.cardColors(containerColor = DarkCard),
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "7-Day Price History",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Price History",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                // Time range selector
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    TimeRange.values().forEach { range ->
+                                        FilterChip(
+                                            selected = state.selectedTimeRange == range,
+                                            onClick = { viewModel.setTimeRange(range) },
+                                            label = { Text(range.displayName) },
+                                            modifier = Modifier.height(32.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Spacer(Modifier.height(12.dp))
                             PriceChart(
                                 pricePoints = state.history,
@@ -152,8 +191,8 @@ fun ItemDetailScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                StatItem("7d Low", state.minPrice.toSkyCoins())
-                                StatItem("7d High", state.maxPrice.toSkyCoins())
+                                StatItem("${state.selectedTimeRange.displayName.lowercase()} Low", state.minPrice.toSkyCoins())
+                                StatItem("${state.selectedTimeRange.displayName.lowercase()} High", state.maxPrice.toSkyCoins())
                             }
                         }
                     }
@@ -184,6 +223,29 @@ fun ItemDetailScreen(
                         }
                     }
                 }
+
+                // Relevant Events section
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .border(1.dp, DarkCardBorder, CardDefaults.shape),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Relevant Events",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "No recent events for this item",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             state.error?.let {
@@ -207,6 +269,7 @@ fun ItemDetailScreen(
             LogTradeSheet(
                 initialItemTag = itemTag,
                 marketPrice = state.item?.sellPrice ?: 0.0,
+                allItems = viewModel.allItems.collectAsState().value.values.toList(),
                 onDismiss = { showTradeSheet = false },
                 onConfirm = { _, type, qty, price, notes ->
                     viewModel.recordTrade(type, qty, price, notes)

@@ -12,12 +12,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.stocks.data.local.db.TransactionType
+import com.example.stocks.domain.model.BazaarItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogTradeSheet(
     initialItemTag: String = "",
     marketPrice: Double = 0.0,
+    allItems: List<BazaarItem> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (tag: String, type: TransactionType, quantity: Long, price: Double, notes: String) -> Unit,
 ) {
@@ -67,13 +69,13 @@ fun LogTradeSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // Item Tag input
-            OutlinedTextField(
-                value = itemTag,
-                onValueChange = { itemTag = it.uppercase().replace(' ', '_') },
-                label = { Text("Item Tag") },
-                placeholder = { Text("e.g. GLOSSY_GEMSTONE") },
-                singleLine = true,
+            // Item Tag input with searchable dropdown
+            SearchableDropdown(
+                label = "Item",
+                placeholder = "Search items...",
+                selectedTag = itemTag,
+                allItems = allItems,
+                onItemSelected = { itemTag = it },
                 modifier = Modifier.fillMaxWidth(),
             )
 

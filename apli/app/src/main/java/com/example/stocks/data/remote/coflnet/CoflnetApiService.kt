@@ -21,4 +21,12 @@ interface CoflnetApiService {
     suspend fun getDayHistory(
         @Path("itemTag") itemTag: String,
     ): List<PriceHistoryEntry>
+
+    /**
+     * 30-day price history for a Bazaar item.
+     */
+    @GET("api/bazaar/{itemTag}/history/month")
+    suspend fun getMonthHistory(
+        @Path("itemTag") itemTag: String,
+    ): List<PriceHistoryEntry>
 }

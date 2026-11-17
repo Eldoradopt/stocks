@@ -30,6 +30,8 @@ import com.example.stocks.ui.theme.DarkCard
 import com.example.stocks.ui.theme.DarkCardBorder
 import com.example.stocks.ui.theme.EmeraldProfit
 import com.example.stocks.ui.theme.HypixelGold
+import com.example.stocks.ui.theme.CrimsonLoss
+import com.example.stocks.ui.theme.HypixelBlue
 import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -210,7 +212,8 @@ fun PortfolioScreen(
                         viewModel.recordSell(tag, qty, price, notes)
                     }
                     showTradeSheet = false
-                }
+                },
+                allItems = viewModel.allItems.collectAsState().value.values.toList()
             )
         }
 
@@ -276,7 +279,7 @@ private fun BankHeroCard(
                 text = totalNetWorth,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = HypixelGold,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -347,7 +350,7 @@ private fun QuickActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = EmeraldProfit,
+                tint = HypixelBlue,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(Modifier.height(6.dp))
@@ -418,12 +421,14 @@ private fun HoldingRowItem(
                 Text(
                     holding.itemTag.replace('_', ' '),
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     "${holding.quantity}x @ ${if (isHidden) "•••" else holding.avgBuyPrice.toSkyCoins()}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = HypixelBlue,
+                    fontWeight = FontWeight.Medium
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -460,12 +465,16 @@ private fun TransactionRowItem(
         ) {
             // Type Pill
             Surface(
-                color = if (isBuy) EmeraldProfit.copy(alpha = 0.15f) else MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
-                shape = MaterialTheme.shapes.extraSmall
+                color = if (isBuy) EmeraldProfit.copy(alpha = 0.2f) else CrimsonLoss.copy(alpha = 0.2f),
+                shape = MaterialTheme.shapes.extraSmall,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isBuy) EmeraldProfit.copy(alpha = 0.5f) else CrimsonLoss.copy(alpha = 0.5f)
+                )
             ) {
                 Text(
                     text = if (isBuy) "BUY" else "SELL",
-                    color = if (isBuy) EmeraldProfit else MaterialTheme.colorScheme.error,
+                    color = if (isBuy) EmeraldProfit else CrimsonLoss,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -478,7 +487,8 @@ private fun TransactionRowItem(
                 Text(
                     transaction.itemTag.replace('_', ' '),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     dateFormat.format(Date(transaction.timestamp)),
@@ -497,7 +507,8 @@ private fun TransactionRowItem(
                 Text(
                     text = "${transaction.quantity}x @ ${transaction.pricePerUnit.toSkyCoins()}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = HypixelBlue,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }

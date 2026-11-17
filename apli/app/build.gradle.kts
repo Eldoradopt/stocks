@@ -90,6 +90,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
 
+    // Dependency resolution to fix version conflicts
+    implementation("androidx.concurrent:concurrent-futures:1.2.0")
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

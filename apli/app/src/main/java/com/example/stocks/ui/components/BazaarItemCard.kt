@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import com.example.stocks.domain.model.BazaarItem
 import com.example.stocks.ui.theme.EmeraldProfit
 import com.example.stocks.ui.theme.HypixelGold
+import com.example.stocks.ui.theme.CrimsonLoss
+import com.example.stocks.ui.theme.HypixelBlue
 
 /** Formats a coin amount using SkyBlock conventions (K / M / B suffix). */
 fun Double.toSkyCoins(): String = when {
@@ -62,7 +64,8 @@ fun BazaarItemCard(
                     Text(
                         text = "Buy: ${item.buyPrice.toSkyCoins()}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = HypixelBlue,
+                        fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -74,7 +77,8 @@ fun BazaarItemCard(
                     Text(
                         text = "Spread: ${"%.1f".format(item.spreadPct)}%",
                         style = MaterialTheme.typography.bodySmall,
-                        color = EmeraldProfit,
+                        color = if (item.spreadPct > 5) CrimsonLoss else EmeraldProfit,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -114,11 +118,15 @@ fun BazaarItemCard(
 @Composable
 fun ChangeBadge(pct: Double, modifier: Modifier = Modifier) {
     val positive = pct >= 0
-    val color    = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val color    = if (positive) EmeraldProfit else CrimsonLoss
     Surface(
-        color = color.copy(alpha = 0.15f),
+        color = color.copy(alpha = 0.2f),
         shape = MaterialTheme.shapes.small,
         modifier = modifier,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            color.copy(alpha = 0.5f)
+        )
     ) {
         Text(
             text = "${if (positive) "▲" else "▼"} ${"%.2f".format(pct)}%",

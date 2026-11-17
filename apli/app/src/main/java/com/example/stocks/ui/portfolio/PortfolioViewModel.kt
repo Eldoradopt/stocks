@@ -36,6 +36,15 @@ class PortfolioViewModel(
 
     private val _isLinking = MutableStateFlow(false)
     private val _linkError = MutableStateFlow<String?>(null)
+    private val _allItems = MutableStateFlow<Map<String, com.example.stocks.domain.model.BazaarItem>>(emptyMap())
+
+    val allItems: StateFlow<Map<String, com.example.stocks.domain.model.BazaarItem>> = _allItems.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            runCatching { _allItems.value = bazaarRepo.getAllItems() }
+        }
+    }
 
     val uiState: StateFlow<BankDashboardUiState> = combine(
         portfolioRepo.observeLiveHoldings(),
@@ -90,8 +99,8 @@ class PortfolioViewModel(
         _isLinking.value = true
         _linkError.value = null
         val result = accountRepo.linkAccount(ign, apiKey)
-        result.onFailure {
-            _linkError.value = it.message ?: "Could not find player $ign"
+        result.onFailure { exception ->
+            _linkError.value = exception.message ?: "Could not link account. Please try again."
         }
         _isLinking.value = false
     }

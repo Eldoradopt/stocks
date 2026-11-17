@@ -13,13 +13,20 @@ import kotlinx.coroutines.launch
 data class ItemDetailUiState(
     val item: BazaarItem? = null,
     val history: List<PricePoint> = emptyList(),
-    val change7dPct: Double = 0.0,
+    val changePct: Double = 0.0,
     val minPrice: Double = 0.0,
     val maxPrice: Double = 0.0,
     val isWatched: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
+    val selectedTimeRange: TimeRange = TimeRange.WEEK,
 )
+
+enum class TimeRange(val displayName: String) {
+    DAY("1D"),
+    WEEK("1W"),
+    MONTH("1M")
+}
 
 class ItemDetailViewModel(
     private val itemTag: String,
@@ -29,10 +36,17 @@ class ItemDetailViewModel(
 
     private val _uiState = MutableStateFlow(ItemDetailUiState())
     val uiState: StateFlow<ItemDetailUiState> = _uiState.asStateFlow()
+    private val _allItems = MutableStateFlow<Map<String, BazaarItem>>(emptyMap())
+    val allItems: StateFlow<Map<String, BazaarItem>> = _allItems.asStateFlow()
 
     init {
         load()
         observeWatchlistState()
+        loadAllItems()
+    }
+
+    private fun loadAllItems() = viewModelScope.launch {
+        runCatching { _allItems.value = bazaarRepo.getAllItems() }
     }
 
     private fun observeWatchlistState() = viewModelScope.launch {
@@ -45,27 +59,44 @@ class ItemDetailViewModel(
     fun load() = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true, error = null) }
         runCatching {
-            val item    = bazaarRepo.getItem(itemTag)
-            val history = bazaarRepo.getWeekHistory(itemTag)
-            val prices  = history.map { it.sellPrice }
-            val first   = history.firstOrNull()?.sellPrice ?: 0.0
-            val last    = history.lastOrNull()?.sellPrice  ?: 0.0
-            val change  = if (first > 0) ((last - first) / first) * 100.0 else 0.0
+            val item = bazaarRepo.getItem(itemTag)
             val watched = portfolioRepo.isWatched(itemTag)
+            _uiState.update { it.copy(item = item, isWatched = watched) }
+            loadHistory()
+        }.onFailure { e ->
+            _uiState.update { it.copy(isLoading = false, error = e.message) }
+        }
+    }
+
+    fun loadHistory() = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        runCatching {
+            val history = when (_uiState.value.selectedTimeRange) {
+                TimeRange.DAY -> bazaarRepo.getDayHistory(itemTag)
+                TimeRange.WEEK -> bazaarRepo.getWeekHistory(itemTag)
+                TimeRange.MONTH -> bazaarRepo.getMonthHistory(itemTag)
+            }
+            val prices = history.map { it.sellPrice }
+            val first = history.firstOrNull()?.sellPrice ?: 0.0
+            val last = history.lastOrNull()?.sellPrice ?: 0.0
+            val change = if (first > 0) ((last - first) / first) * 100.0 else 0.0
             _uiState.update {
-                ItemDetailUiState(
-                    item        = item,
-                    history     = history,
-                    change7dPct = change,
-                    minPrice    = prices.minOrNull() ?: 0.0,
-                    maxPrice    = prices.maxOrNull() ?: 0.0,
-                    isWatched   = watched,
-                    isLoading   = false,
+                it.copy(
+                    history = history,
+                    changePct = change,
+                    minPrice = prices.minOrNull() ?: 0.0,
+                    maxPrice = prices.maxOrNull() ?: 0.0,
+                    isLoading = false,
                 )
             }
         }.onFailure { e ->
             _uiState.update { it.copy(isLoading = false, error = e.message) }
         }
+    }
+
+    fun setTimeRange(range: TimeRange) {
+        _uiState.update { it.copy(selectedTimeRange = range) }
+        loadHistory()
     }
 
     fun toggleWatchlist() = viewModelScope.launch {

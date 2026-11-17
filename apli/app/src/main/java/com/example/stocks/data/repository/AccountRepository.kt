@@ -26,20 +26,45 @@ class AccountRepository(
 
     suspend fun linkAccount(username: String, apiKey: String = ""): Result<PlayerAccountDetails> = runCatching {
         // 1. Resolve username to UUID
-        val mojangProfile = mojangApi.getProfile(username.trim())
+        val mojangProfile = try {
+            mojangApi.getProfile(username.trim())
+        } catch (e: Exception) {
+            throw Exception("Player '$username' not found. Please check the username spelling.")
+        }
         val uuid = mojangProfile.id
         val properName = mojangProfile.name
 
         // 2. Fetch profiles
         val key = apiKey.trim().ifBlank { null }
-        val response = hypixelApi.getProfiles(uuid = uuid, apiKey = key)
+        val response = try {
+            hypixelApi.getProfiles(uuid = uuid, apiKey = key)
+        } catch (e: Exception) {
+            val errorMsg = if (key != null) {
+                "Failed to fetch Hypixel profiles. Please check your API key."
+            } else {
+                "Failed to fetch Hypixel profiles. Try adding an API key from /api new on Hypixel."
+            }
+            throw Exception(errorMsg)
+        }
+        
         val profiles = response.profiles ?: emptyList()
+        
+        if (profiles.isEmpty()) {
+            throw Exception("No SkyBlock profiles found for this player. Make sure you have played SkyBlock at least once.")
+        }
+        
         val activeProfile = profiles.firstOrNull { it.selected == true } ?: profiles.firstOrNull()
+            ?: throw Exception("No active SkyBlock profile found.")
 
         val bankCoins = activeProfile?.banking?.balance ?: 0.0
         val memberData = activeProfile?.members?.get(uuid)
-        val purseCoins = memberData?.currencies?.coinPurse ?: 0.0
-        val sacks = memberData?.inventory?.sacksCounts ?: emptyMap()
+        
+        if (memberData == null) {
+            throw Exception("Player data not found in the selected profile. Try adding an API key.")
+        }
+        
+        val purseCoins = memberData.currencies?.coinPurse ?: 0.0
+        val sacks = memberData.inventory?.sacksCounts ?: emptyMap()
 
         // 3. Persist to DataStore
         userPrefs.saveLinkedAccount(properName, uuid, key ?: "")

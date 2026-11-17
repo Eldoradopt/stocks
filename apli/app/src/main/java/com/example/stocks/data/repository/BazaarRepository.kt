@@ -92,6 +92,11 @@ class BazaarRepository(
         return entries.map { it.toDomain() }
     }
 
+    suspend fun getMonthHistory(tag: String): List<PricePoint> {
+        val entries = coflnet.getMonthHistory(tag)
+        return entries.map { it.toDomain() }
+    }
+
     private fun PriceHistoryEntry.toDomain() = PricePoint(
         // Coflnet returns ISO-8601; parse to epoch ms.
         timestamp = try {

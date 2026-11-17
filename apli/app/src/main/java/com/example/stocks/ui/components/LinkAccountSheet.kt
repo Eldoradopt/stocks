@@ -20,6 +20,7 @@ fun LinkAccountSheet(
 ) {
     var ignText by remember { mutableStateOf(currentIgn) }
     var apiKeyText by remember { mutableStateOf("") }
+    var apiKeyError by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -51,31 +52,57 @@ fun LinkAccountSheet(
 
             OutlinedTextField(
                 value = apiKeyText,
-                onValueChange = { apiKeyText = it },
+                onValueChange = { 
+                    apiKeyText = it
+                    apiKeyError = if (it.isNotBlank() && (it.contains("http") || it.contains("/") || it.contains("shiiyu"))) {
+                        "Enter your API key, not a URL"
+                    } else null
+                },
                 label = { Text("Hypixel API Key (Optional)") },
-                placeholder = { Text("Leave blank for public stats") },
+                placeholder = { Text("Paste your API key here") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                isError = apiKeyError != null,
+                supportingText = apiKeyError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } }
+            )
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Get your API key on Hypixel.net using /api new",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             if (errorMessage != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(20.dp))
 
             Button(
                 onClick = {
-                    if (ignText.isNotBlank()) {
+                    if (ignText.isNotBlank() && apiKeyError == null) {
                         onLink(ignText.trim(), apiKeyText.trim())
                     }
                 },
-                enabled = ignText.isNotBlank() && !isLoading,
+                enabled = ignText.isNotBlank() && !isLoading && apiKeyError == null,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (isLoading) {
