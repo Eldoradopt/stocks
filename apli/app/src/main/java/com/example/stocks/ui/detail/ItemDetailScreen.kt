@@ -250,7 +250,7 @@ fun ItemDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            StatItem("Instant Buy", item.buyPrice.toSkyCoins())
+                            StatItem("Instant Buy", (item.buyPrice ?: 0.0).toSkyCoins())
                             StatItem("Instant Sell", item.sellPrice.toSkyCoins())
                             StatItem("Spread", "${"%.1f".format(item.spreadPct)}%")
                         }
@@ -259,9 +259,9 @@ fun ItemDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            StatItem("Weekly Buy Vol", item.buyMovingWeek.toDouble().toSkyCoins())
+                            StatItem("Weekly Buy Vol", (item.buyMovingWeek ?: 0L).toDouble().toSkyCoins())
                             StatItem("Weekly Sell Vol", item.sellMovingWeek.toDouble().toSkyCoins())
-                            StatItem("Total Orders", (item.buyVolume + item.sellVolume).toDouble().toSkyCoins())
+                            StatItem("Total Orders", ((item.buyVolume ?: 0L) + item.sellVolume).toDouble().toSkyCoins())
                         }
                     }
                 }

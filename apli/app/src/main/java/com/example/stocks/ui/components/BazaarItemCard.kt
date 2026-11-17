@@ -62,7 +62,7 @@ fun BazaarItemCard(
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Buy: ${item.buyPrice.toSkyCoins()}",
+                        text = "Buy: ${(item.buyPrice ?: 0.0).toSkyCoins()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = HypixelBlue,
                         fontWeight = FontWeight.Medium,

@@ -21,7 +21,7 @@ data class QuickStatus(
     @Json(name = "sellPrice") val sellPrice: Double,
     @Json(name = "sellVolume") val sellVolume: Long,
     @Json(name = "sellMovingWeek") val sellMovingWeek: Long,
-    @Json(name = "buyPrice") val buyPrice: Double,
-    @Json(name = "buyVolume") val buyVolume: Long,
-    @Json(name = "buyMovingWeek") val buyMovingWeek: Long,
+    @Json(name = "buyPrice") val buyPrice: Double? = null,
+    @Json(name = "buyVolume") val buyVolume: Long? = null,
+    @Json(name = "buyMovingWeek") val buyMovingWeek: Long? = null,
 )

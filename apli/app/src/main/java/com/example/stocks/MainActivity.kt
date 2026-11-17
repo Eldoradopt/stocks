@@ -8,8 +8,10 @@ import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -44,7 +46,9 @@ private fun SkyBlockMainContent() {
     val bottomNavItems = listOf(
         Triple(Screen.Portfolio, "Bank", Icons.Default.AccountBalance),
         Triple(Screen.Flipper,   "Flipper", Icons.Default.AutoGraph),
-        Triple(Screen.Watchlist, "Watchlist", Icons.Default.TrendingUp),
+        Triple(Screen.Watchlist, "Watchlist", Icons.AutoMirrored.Filled.TrendingUp),
+        Triple(Screen.BazaarWatcher, "Bazaar", Icons.Default.ShoppingCart),
+        Triple(Screen.BossTracker, "Bosses", Icons.Default.BugReport),
         Triple(Screen.Search,    "Search", Icons.Default.Search),
     )
     // Hide bottom bar on detail screen

@@ -6,6 +6,7 @@ import com.squareup.moshi.JsonClass
 @JsonClass(generateAdapter = true)
 data class SkyBlockProfilesResponse(
     @Json(name = "success") val success: Boolean,
+    @Json(name = "cause") val cause: String? = null,
     @Json(name = "profiles") val profiles: List<SkyBlockProfileData>?,
 )
 

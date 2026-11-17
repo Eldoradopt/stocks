@@ -8,9 +8,11 @@ import androidx.room.RoomDatabase
         HoldingEntity::class,
         WatchlistEntity::class,
         TransactionEntity::class,
-        PriceAlertEntity::class
+        PriceAlertEntity::class,
+        BazaarListingEntity::class,
+        BossDropEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -18,4 +20,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun watchlistDao(): WatchlistDao
     abstract fun transactionDao(): TransactionDao
     abstract fun priceAlertDao(): PriceAlertDao
+    abstract fun bazaarListingDao(): BazaarListingDao
+    abstract fun bossDropDao(): BossDropDao
 }

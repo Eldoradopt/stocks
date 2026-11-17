@@ -17,7 +17,7 @@ data class ItemDetailUiState(
     val item: BazaarItem? = null,
     val categorySubtitle: String = "Bazaar Commodity",
     val history: List<PricePoint> = emptyList(),
-    val selectedTimeRange: ChartTimeRange = ChartTimeRange.ONE_WEEK,
+    val selectedTimeRange: ChartTimeRange = ChartTimeRange.ONE_DAY,
     val changePct: Double = 0.0,
     val minPrice: Double = 0.0,
     val maxPrice: Double = 0.0,
@@ -40,7 +40,7 @@ class ItemDetailViewModel(
     val uiState: StateFlow<ItemDetailUiState> = _uiState.asStateFlow()
 
     init {
-        load(ChartTimeRange.ONE_WEEK)
+        load(ChartTimeRange.ONE_DAY)
         observeWatchlistState()
     }
 
@@ -55,10 +55,14 @@ class ItemDetailViewModel(
         _uiState.update { it.copy(isLoading = true, selectedTimeRange = range, error = null) }
         runCatching {
             val item = bazaarRepo.getItem(itemTag)
-            val history = if (range == ChartTimeRange.ONE_DAY) {
-                bazaarRepo.getDayHistory(itemTag)
-            } else {
-                bazaarRepo.getWeekHistory(itemTag)
+            val history = when (range) {
+                ChartTimeRange.ONE_HOUR -> bazaarRepo.getDayHistory(itemTag).takeLast(24)
+                ChartTimeRange.FOUR_HOURS -> bazaarRepo.getDayHistory(itemTag).takeLast(96)
+                ChartTimeRange.ONE_DAY -> bazaarRepo.getDayHistory(itemTag)
+                ChartTimeRange.ONE_WEEK -> bazaarRepo.getWeekHistory(itemTag)
+                ChartTimeRange.ONE_MONTH -> bazaarRepo.getMonthHistory(itemTag)
+                ChartTimeRange.SIX_MONTHS -> bazaarRepo.get3MonthHistory(itemTag)
+                ChartTimeRange.ALL -> bazaarRepo.getYearHistory(itemTag)
             }
 
             val prices = history.map { it.sellPrice }
@@ -69,7 +73,8 @@ class ItemDetailViewModel(
             val alert = portfolioRepo.getPriceAlert(itemTag)
 
             // Flipper Profit calculations (1.125% Bazaar tax)
-            val netSell = (item?.buyPrice ?: 0.0) * 0.98875
+            val buyPrice = item?.buyPrice ?: 0.0
+            val netSell = buyPrice * 0.98875
             val margin = (netSell - (item?.sellPrice ?: 0.0)).coerceAtLeast(0.0)
             val roi = if ((item?.sellPrice ?: 0.0) > 0) (margin / item!!.sellPrice) * 100.0 else 0.0
             val hourlyVol = ((item?.sellMovingWeek ?: 0L) / (7 * 24)).coerceAtLeast(0)

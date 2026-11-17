@@ -4,14 +4,17 @@ import com.example.stocks.data.local.datastore.UserPreferencesRepository
 import com.example.stocks.data.local.datastore.UserSettings
 import com.example.stocks.data.remote.hypixel.HypixelApiService
 import com.example.stocks.data.remote.mojang.MojangApiService
+import com.example.stocks.data.remote.shiiyu.ShiiyuApiService
 import com.example.stocks.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 
 class AccountRepository(
     private val mojangApi: MojangApiService,
     private val hypixelApi: HypixelApiService,
+    private val shiiyuApi: ShiiyuApiService,
     private val userPrefs: UserPreferencesRepository,
     private val bazaarRepo: BazaarRepository,
 ) {
@@ -23,30 +26,48 @@ class AccountRepository(
     private val _currentSacksBreakdown = MutableStateFlow<SacksBreakdown?>(null)
     val currentSacksBreakdown = _currentSacksBreakdown.asStateFlow()
 
-    suspend fun linkAccount(username: String, apiKey: String = ""): Result<Unit> = runCatching {
-        // 1. Resolve username to UUID
-        val mojangProfile = try {
-            mojangApi.getProfile(username.trim())
-        } catch (e: Exception) {
-            throw Exception("Player '$username' not found. Please check the username spelling.")
-        }
-        val uuid = mojangProfile.id
-        val properName = mojangProfile.name
-        val key = apiKey.trim().ifBlank { null }
+    suspend fun linkAccount(username: String, apiKey: String = "", shiiyuUrl: String = ""): Result<Unit> = runCatching {
+        // If Shiiyu URL is provided, use it instead of Hypixel API
+        if (shiiyuUrl.isNotBlank() && shiiyuUrl.contains("shiiyu.moe")) {
+            // Add https:// prefix if missing
+            val fullUrl = if (shiiyuUrl.startsWith("http")) {
+                shiiyuUrl
+            } else {
+                "https://$shiiyuUrl"
+            }
+            fetchFromShiiyu(fullUrl)
+            // Extract profile name from URL for display
+            val urlParts = fullUrl.trim().split("/")
+            val profileName = urlParts.getOrNull(5) ?: urlParts.getOrNull(4) ?: username
+            userPrefs.saveLinkedAccount(profileName, "", "", fullUrl)
+            Result.success(Unit)
+        } else {
+            // Original Hypixel flow
+            val mojangProfile = try {
+                mojangApi.getProfile(username.trim())
+            } catch (e: Exception) {
+                throw Exception("Player '$username' not found. Please check the username spelling.")
+            }
+            val uuid = mojangProfile.id
+            val properName = mojangProfile.name
+            val key = apiKey.trim().ifBlank { null }
 
-        userPrefs.saveLinkedAccount(properName, uuid, key ?: "")
-        fetchAndSyncProfiles(uuid, key)
+            userPrefs.saveLinkedAccount(properName, uuid, key ?: "")
+            fetchAndSyncProfiles(uuid, key)
+        }
     }
 
     suspend fun refreshLinkedAccount(): Result<Unit> = runCatching {
-        var currentSettings: UserSettings? = null
-        userPrefs.userSettingsFlow.collect {
-            currentSettings = it
-            return@collect
+        val settings = userPrefs.userSettingsFlow.first()
+        
+        // If Shiiyu URL is saved, use that
+        if (settings.shiiyuUrl.isNotBlank()) {
+            fetchFromShiiyu(settings.shiiyuUrl)
+            return@runCatching
         }
-        val settings = currentSettings ?: return@runCatching
+        
+        // Otherwise use Hypixel
         if (settings.linkedUuid.isBlank()) return@runCatching
-
         fetchAndSyncProfiles(settings.linkedUuid, settings.hypixelApiKey.ifBlank { null })
     }
 
@@ -63,21 +84,112 @@ class AccountRepository(
         evaluateCurrentMemberSacks(currentPlayer?.sacksCounts ?: emptyMap())
     }
 
+    private suspend fun fetchFromShiiyu(shiiyuUrl: String) {
+        val htmlResponse = try {
+            shiiyuApi.getProfile(shiiyuUrl)
+        } catch (e: Exception) {
+            throw Exception("Failed to fetch Shiiyu profile. Please check the URL.\n\nError: ${e.message}")
+        }
+
+        // Extract username (IGN) from HTML
+        val nameRegex = Regex("""alternateName":"([^"]+)"""")
+        val nameMatch = nameRegex.find(htmlResponse)
+        val username = nameMatch?.groupValues?.get(1) ?: "Unknown"
+
+        // Extract profile name from URL or HTML
+        // URL format: https://sky.shiiyu.moe/stats/USERNAME/PROFILE
+        val urlParts = shiiyuUrl.trim().split("/")
+        val profileName = urlParts.getOrNull(5) ?: try {
+            // Try to extract profile name from HTML if not in URL
+            val profileRegex = Regex(""""profile":"\{[^}]*"cute_name":"([^"]+)"""")
+            val profileMatch = profileRegex.find(htmlResponse)
+            profileMatch?.groupValues?.get(1)
+        } catch (e: Exception) {
+            null
+        } ?: username // Fallback to username if profile name not found
+
+        // Try multiple patterns to extract net worth
+        val netWorth = try {
+            // Pattern 1: From description
+            val descRegex = Regex("""description:"[^"]+ Networth: ([^,]+)""")
+            val descMatch = descRegex.find(htmlResponse)
+            descMatch?.groupValues?.get(1)?.let { parseNetWorth(it) }
+        } catch (e: Exception) {
+            null
+        } ?: try {
+            // Pattern 2: Look for "Networth:" anywhere in the HTML
+            val netWorthRegex = Regex("""Networth:\s*([0-9.,]+[BKM])""")
+            val nwMatch = netWorthRegex.find(htmlResponse)
+            nwMatch?.groupValues?.get(1)?.let { parseNetWorth(it) }
+        } catch (e: Exception) {
+            null
+        } ?: 0.0
+
+        val market = bazaarRepo.getAllItems()
+        
+        // For now, use net worth as total since we can't parse individual purse/bank/sacks from HTML
+        val purse = 0.0
+        val bank = 0.0
+        val sacks = emptyMap<String, Long>()
+
+        val profileId = "shiiyu-profile"
+
+        val coopProfile = CoopProfile(
+            profileId = profileId,
+            cuteName = profileName, // Use profile name instead of username
+            isSelected = true,
+            coopBankCoins = bank,
+            members = listOf(
+                CoopMember(
+                    uuid = "shiiyu-$username",
+                    purseCoins = purse,
+                    sacksCounts = sacks,
+                    sacksValue = 0.0,
+                    slayerValue = 0.0,
+                    isCurrentPlayer = true
+                )
+            ),
+            totalCoopCoins = netWorth // Use net worth instead of purse + bank
+        )
+
+        _coopProfiles.value = listOf(coopProfile)
+        userPrefs.setSelectedProfileId(profileId)
+        userPrefs.updateCachedBalances(purse, bank, 0.0, netWorth)
+    }
+
+    private fun parseNetWorth(text: String): Double {
+        // Parse formats like "117.63M", "5.2K", "1.2B", "500"
+        val cleanText = text.trim().replace(",", "") // Remove commas
+        val multiplier = when {
+            cleanText.endsWith("B", ignoreCase = true) -> 1_000_000_000.0
+            cleanText.endsWith("M", ignoreCase = true) -> 1_000_000.0
+            cleanText.endsWith("K", ignoreCase = true) -> 1_000.0
+            else -> 1.0
+        }
+        val numberStr = cleanText.dropLastWhile { it.isLetter() }.trim()
+        return numberStr.toDoubleOrNull()?.times(multiplier) ?: 0.0
+    }
+
     private suspend fun fetchAndSyncProfiles(uuid: String, apiKey: String?) {
         val response = try {
             hypixelApi.getProfiles(uuid = uuid, apiKey = apiKey)
         } catch (e: Exception) {
             val errorMsg = if (apiKey != null) {
-                "Failed to fetch Hypixel profiles. Please check your API key."
+                "Failed to fetch Hypixel profiles. API key might be invalid or expired.\n\nError: ${e.message}\n\nTry generating a new key with /api new on Hypixel."
             } else {
-                "Failed to fetch Hypixel profiles. Try adding an API key from /api new on Hypixel."
+                "Failed to fetch Hypixel profiles. An API key is required to fetch profile data.\n\nError: ${e.message}\n\nGet your API key by typing /api new on Hypixel.net"
             }
             throw Exception(errorMsg)
         }
 
+        if (!response.success) {
+            val cause = response.cause ?: "Unknown error"
+            throw Exception("Hypixel API error: $cause")
+        }
+
         val rawProfiles = response.profiles ?: emptyList()
         if (rawProfiles.isEmpty()) {
-            throw Exception("No SkyBlock profiles found for this player.")
+            throw Exception("No SkyBlock profiles found for this player. Make sure you've played SkyBlock at least once.")
         }
 
         val market = bazaarRepo.getAllItems()

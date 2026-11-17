@@ -2,6 +2,7 @@ package com.example.stocks.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,6 +27,7 @@ import com.example.stocks.ui.theme.DarkCard
 import com.example.stocks.ui.theme.DarkCardBorder
 import com.example.stocks.ui.theme.EmeraldProfit
 import com.example.stocks.ui.theme.CrimsonLoss
+import com.example.stocks.ui.components.toSkyCoins
 import kotlin.math.max
 import kotlin.math.min
 
@@ -33,12 +36,14 @@ enum class ChartMode {
     CANDLESTICK
 }
 
-enum class ChartTimeRange(val label: String) {
-    ONE_DAY("1D"),
-    ONE_WEEK("1S"),
-    ONE_MONTH("1M"),
-    SIX_MONTHS("6M"),
-    ALL("1A")
+enum class ChartTimeRange(val label: String, val hours: Int) {
+    ONE_HOUR("1H", 1),
+    FOUR_HOURS("4H", 4),
+    ONE_DAY("1D", 24),
+    ONE_WEEK("1W", 168),
+    ONE_MONTH("1M", 720),
+    SIX_MONTHS("6M", 4320),
+    ALL("1Y", Int.MAX_VALUE)
 }
 
 data class CandlestickData(
@@ -58,6 +63,8 @@ fun RevolutChart(
     onRangeSelected: (ChartTimeRange) -> Unit = {},
 ) {
     var chartMode by remember { mutableStateOf(ChartMode.LINE) }
+    var selectedPoint by remember { mutableStateOf<PricePoint?>(null) }
+    var touchX by remember { mutableStateOf<Float?>(null) }
 
     val accentColor = if (isPositiveTrend) EmeraldProfit else CrimsonLoss
     val gradientColor = if (isPositiveTrend) Color(0x4000E676) else Color(0x40FF3B30)
@@ -89,6 +96,18 @@ fun RevolutChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(230.dp)
+                .pointerInput(pricePoints) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            touchX = null
+                            selectedPoint = null
+                        }
+                    ) { change, _ ->
+                        touchX = change.position.x
+                        val index = ((touchX ?: 0f) / size.width * (pricePoints.size - 1)).toInt().coerceIn(0, pricePoints.size - 1)
+                        selectedPoint = pricePoints.getOrNull(index)
+                    }
+                }
         ) {
             Canvas(
                 modifier = Modifier
@@ -196,6 +215,17 @@ fun RevolutChart(
                         )
                     }
                 }
+
+                // Touch indicator line
+                touchX?.let { x ->
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(x, 0f),
+                        end = Offset(x, h),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
+                    )
+                }
             }
 
             // High & Low labels pinned to chart edge (Revolut style)
@@ -227,6 +257,50 @@ fun RevolutChart(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                     )
+                }
+            }
+
+            // Touch indicator line and tooltip
+            touchX?.let { x ->
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
+                    )
+                }
+            }
+
+            // Selected point tooltip
+            selectedPoint?.let { point ->
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp),
+                    color = Color.Black.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        Text(
+                            point.sellPrice.toSkyCoins(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = accentColor
+                        )
+                        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(point.timestamp))
+                        Text(
+                            time,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

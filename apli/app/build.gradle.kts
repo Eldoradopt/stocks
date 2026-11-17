@@ -61,6 +61,7 @@ dependencies {
     // Networking
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.moshi)
+    implementation("com.squareup.retrofit2:converter-scalars:2.9.0")
     implementation(libs.okhttp.core)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi.core)

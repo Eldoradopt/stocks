@@ -156,7 +156,7 @@ private fun FlipOpportunityCard(
             }
 
             Spacer(Modifier.height(10.dp))
-            Divider(color = DarkCardBorder)
+            HorizontalDivider(color = DarkCardBorder)
             Spacer(Modifier.height(10.dp))
 
             Row(

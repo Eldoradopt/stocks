@@ -61,10 +61,11 @@ class FlipperViewModel(
         runCatching {
             val market = bazaarRepo.getAllItems()
             val list = market.values.mapNotNull { item ->
-                if (item.buyPrice <= 0 || item.sellPrice <= 0) return@mapNotNull null
+                val buyPrice = item.buyPrice ?: 0.0
+                if (buyPrice <= 0 || item.sellPrice <= 0) return@mapNotNull null
 
                 // Hypixel Bazaar tax: 1.125%
-                val netSell = item.buyPrice * 0.98875
+                val netSell = buyPrice * 0.98875
                 val margin = netSell - item.sellPrice
                 if (margin <= 0) return@mapNotNull null
 
@@ -79,7 +80,7 @@ class FlipperViewModel(
                 BazaarFlip(
                     tag = item.tag,
                     displayName = item.displayName,
-                    buyPrice = item.buyPrice,
+                    buyPrice = buyPrice,
                     sellPrice = item.sellPrice,
                     netMargin = margin,
                     roiPct = roi,

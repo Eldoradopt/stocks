@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 data class BankDashboardUiState(
     val holdings: List<Holding> = emptyList(),
     val recentTransactions: List<TransactionEntity> = emptyList(),
-    val userSettings: UserSettings = UserSettings(),
+    val userSettings: UserSettings = UserSettings(shiiyuUrl = ""),
     val coopProfiles: List<CoopProfile> = emptyList(),
     val sacksBreakdown: SacksBreakdown? = null,
     val bazaarInvestedCost: Double = 0.0,
@@ -48,6 +48,8 @@ class PortfolioViewModel(
     init {
         viewModelScope.launch {
             runCatching { _allItems.value = bazaarRepo.getAllItems() }
+            // Auto-refresh account on app start if linked
+            runCatching { accountRepo.refreshLinkedAccount() }
         }
     }
 
@@ -59,7 +61,15 @@ class PortfolioViewModel(
         accountRepo.currentSacksBreakdown,
         _isLinking,
         _linkError,
-    ) { holdings, transactions, settings, profiles, sacks, linking, error ->
+    ) { args ->
+        val holdings = args[0] as List<Holding>
+        val transactions = args[1] as List<TransactionEntity>
+        val settings = args[2] as UserSettings
+        val profiles = args[3] as List<CoopProfile>
+        val sacks = args[4] as SacksBreakdown?
+        val linking = args[5] as Boolean
+        val error = args[6] as String?
+
         val invested = holdings.sumOf { it.costBasis }
         val bazaarValue = holdings.sumOf { it.currentValue }
         val pnl = bazaarValue - invested
@@ -68,7 +78,14 @@ class PortfolioViewModel(
         val purse = settings.cachedPurseCoins
         val bank = settings.cachedBankCoins
         val sacksVal = sacks?.totalSacksValue ?: settings.cachedSacksCoins
-        val netWorth = purse + bank + sacksVal + bazaarValue
+        
+        // If using Shiiyu, use the cached net worth directly
+        // Otherwise calculate from purse + bank + sacks + bazaar
+        val netWorth = if (settings.shiiyuUrl.isNotBlank()) {
+            settings.cachedNetWorth + bazaarValue
+        } else {
+            purse + bank + sacksVal + bazaarValue
+        }
 
         BankDashboardUiState(
             holdings = holdings,
@@ -117,10 +134,10 @@ class PortfolioViewModel(
         portfolioRepo.removeHolding(tag)
     }
 
-    fun linkAccount(ign: String, apiKey: String) = viewModelScope.launch {
+    fun linkAccount(ign: String, apiKey: String = "", shiiyuUrl: String = "") = viewModelScope.launch {
         _isLinking.value = true
         _linkError.value = null
-        val result = accountRepo.linkAccount(ign, apiKey)
+        val result = accountRepo.linkAccount(ign, apiKey, shiiyuUrl)
         result.onFailure { exception ->
             _linkError.value = exception.message ?: "Could not link account. Please try again."
         }

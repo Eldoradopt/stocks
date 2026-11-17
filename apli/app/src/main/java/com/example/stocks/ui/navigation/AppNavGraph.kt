@@ -11,6 +11,8 @@ import com.example.stocks.ui.flipper.FlipperScreen
 import com.example.stocks.ui.portfolio.PortfolioScreen
 import com.example.stocks.ui.search.SearchScreen
 import com.example.stocks.ui.watchlist.WatchlistScreen
+import com.example.stocks.ui.bazaar.BazaarWatcherScreen
+import com.example.stocks.ui.boss.BossTrackerScreen
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -26,6 +28,12 @@ fun AppNavGraph(navController: NavHostController) {
         }
         composable(Screen.Search.route) {
             SearchScreen(onItemClick = { tag -> navController.navigate(Screen.Detail.route(tag)) })
+        }
+        composable(Screen.BazaarWatcher.route) {
+            BazaarWatcherScreen()
+        }
+        composable(Screen.BossTracker.route) {
+            BossTrackerScreen()
         }
         composable(
             route = Screen.Detail.route,

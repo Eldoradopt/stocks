@@ -1,21 +1,27 @@
 package com.example.stocks.ui.portfolio
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.stocks.data.local.db.TransactionEntity
@@ -47,6 +53,13 @@ fun PortfolioScreen(
     var showTradeSheet by remember { mutableStateOf(false) }
     var showAccountSheet by remember { mutableStateOf(false) }
 
+    // Close sheet when linking succeeds
+    LaunchedEffect(state.userSettings.linkedIgn) {
+        if (state.userSettings.linkedIgn.isNotBlank() && showAccountSheet) {
+            showAccountSheet = false
+        }
+    }
+
     val isHidden = state.userSettings.isBalanceHidden
 
     fun formatBalance(amount: Double): String {
@@ -76,15 +89,27 @@ fun PortfolioScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::toggleHideBalance) {
-                        Icon(
-                            imageVector = if (isHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                            contentDescription = "Toggle Balance Privacy",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
+                    Button(
+                        onClick = { showAccountSheet = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = HypixelBlue,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text(if (state.userSettings.linkedIgn.isNotBlank()) "Manage Account" else "Link Account", style = MaterialTheme.typography.labelSmall)
                     }
-                    IconButton(onClick = viewModel::refreshBalances) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    if (state.userSettings.linkedIgn.isNotBlank()) {
+                        IconButton(onClick = viewModel::toggleHideBalance) {
+                            Icon(
+                                imageVector = if (isHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = "Toggle Balance Privacy",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        IconButton(onClick = viewModel::refreshBalances) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
                     }
                 }
             )
@@ -122,7 +147,9 @@ fun PortfolioScreen(
                     unrealizedPnL = if (isHidden) "••••" else state.bazaarUnrealizedPnL.toSkyCoins(),
                     returnPct = state.bazaarReturnPct,
                     isHidden = isHidden,
-                    onToggleHide = viewModel::toggleHideBalance,
+                    linkedAccount = state.userSettings.linkedIgn.isNotBlank(),
+                    profileName = state.coopProfiles.firstOrNull { it.profileId == state.userSettings.selectedProfileId }?.cuteName,
+                    onLinkAccount = { showAccountSheet = true }
                 )
             }
 
@@ -130,19 +157,21 @@ fun PortfolioScreen(
             item {
                 QuickActionRow(
                     onLogTrade = { showTradeSheet = true },
-                    onLinkAccount = { showAccountSheet = true },
                     onRefresh = viewModel::refreshBalances,
                 )
             }
 
             // 3. Asset Breakdown Card (Purse + Bank + Sacks + Bazaar)
-            item {
-                AssetBreakdownCard(
-                    purseCoins = formatBalance(state.purseCoins),
-                    bankCoins = formatBalance(state.bankCoins),
-                    sacksCoins = formatBalance(state.sacksCoins),
-                    investments = formatBalance(state.bazaarCurrentValue),
-                )
+            // Only show this if not using Shiiyu (Shiiyu doesn't provide breakdown)
+            if (state.userSettings.shiiyuUrl.isBlank()) {
+                item {
+                    AssetBreakdownCard(
+                        purseCoins = formatBalance(state.purseCoins),
+                        bankCoins = formatBalance(state.bankCoins),
+                        sacksCoins = formatBalance(state.sacksCoins),
+                        investments = formatBalance(state.bazaarCurrentValue),
+                    )
+                }
             }
 
             // 4. Sacks & Slayer Items Valuation Stash
@@ -255,10 +284,13 @@ fun PortfolioScreen(
                 currentIgn = state.userSettings.linkedIgn,
                 isLoading = state.isLinkingAccount,
                 errorMessage = state.linkAccountError,
-                onDismiss = { showAccountSheet = false },
-                onLink = { ign, key ->
-                    viewModel.linkAccount(ign, key)
-                    showAccountSheet = false
+                onDismiss = { 
+                    if (!state.isLinkingAccount) showAccountSheet = false 
+                },
+                onLink = { ign, key, shiiyuUrl ->
+                    viewModel.linkAccount(ign, key, shiiyuUrl)
+                    // Don't dismiss immediately - let the user see loading/error state
+                    // Sheet will close on success or after manual dismiss
                 },
                 onUnlink = {
                     viewModel.unlinkAccount()
@@ -275,7 +307,9 @@ private fun BankHeroCard(
     unrealizedPnL: String,
     returnPct: Double,
     isHidden: Boolean,
-    onToggleHide: () -> Unit,
+    linkedAccount: Boolean,
+    profileName: String?,
+    onLinkAccount: () -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -290,23 +324,47 @@ private fun BankHeroCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "TOTAL NET WORTH",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.2.sp
-                )
-                IconButton(onClick = onToggleHide, modifier = Modifier.size(24.dp)) {
-                    Icon(
-                        imageVector = if (isHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                Column {
+                    Text(
+                        "TOTAL NET WORTH",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 1.2.sp
                     )
+                    if (linkedAccount && profileName != null) {
+                        Text(
+                            "Profile: $profileName",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldProfit,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+                if (!linkedAccount) {
+                    Button(
+                        onClick = onLinkAccount,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = HypixelBlue,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text("Link Account", style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Button(
+                        onClick = onLinkAccount,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = HypixelBlue
+                        ),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text("Manage", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = totalNetWorth,
@@ -333,7 +391,6 @@ private fun BankHeroCard(
 @Composable
 private fun QuickActionRow(
     onLogTrade: () -> Unit,
-    onLinkAccount: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     Row(
@@ -346,12 +403,6 @@ private fun QuickActionRow(
             label = "Log Trade",
             icon = Icons.Default.AddCircle,
             onClick = onLogTrade,
-            modifier = Modifier.weight(1f)
-        )
-        QuickActionButton(
-            label = "Link IGN",
-            icon = Icons.Default.AccountCircle,
-            onClick = onLinkAccount,
             modifier = Modifier.weight(1f)
         )
         QuickActionButton(
@@ -458,7 +509,7 @@ private fun SacksValuationCard(
             }
 
             Spacer(Modifier.height(10.dp))
-            Divider(color = DarkCardBorder)
+            HorizontalDivider(color = DarkCardBorder)
             Spacer(Modifier.height(10.dp))
 
             // Sub-category totals
