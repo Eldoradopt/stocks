@@ -162,16 +162,13 @@ fun PortfolioScreen(
             }
 
             // 3. Asset Breakdown Card (Purse + Bank + Sacks + Bazaar)
-            // Only show this if not using Shiiyu (Shiiyu doesn't provide breakdown)
-            if (state.userSettings.shiiyuUrl.isBlank()) {
-                item {
-                    AssetBreakdownCard(
-                        purseCoins = formatBalance(state.purseCoins),
-                        bankCoins = formatBalance(state.bankCoins),
-                        sacksCoins = formatBalance(state.sacksCoins),
-                        investments = formatBalance(state.bazaarCurrentValue),
-                    )
-                }
+            item {
+                AssetBreakdownCard(
+                    purseCoins = formatBalance(state.purseCoins),
+                    bankCoins = formatBalance(state.bankCoins),
+                    sacksCoins = formatBalance(state.sacksCoins),
+                    investments = formatBalance(state.bazaarCurrentValue),
+                )
             }
 
             // 4. Sacks & Slayer Items Valuation Stash

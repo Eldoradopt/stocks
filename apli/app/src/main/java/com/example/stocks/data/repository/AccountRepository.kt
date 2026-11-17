@@ -85,6 +85,59 @@ class AccountRepository(
     }
 
     private suspend fun fetchFromShiiyu(shiiyuUrl: String) {
+        // Try SkyCrypt API first (JSON format with detailed data)
+        val apiUrl = shiiyuUrl.replace("https://sky.shiiyu.moe/stats/", "https://sky.shiiyu.moe/api/")
+        
+        val jsonResponse = try {
+            shiiyuApi.getSkyCryptData(apiUrl)
+        } catch (e: Exception) {
+            // Fallback to HTML parsing if API fails
+            fetchFromShiiyuHtml(shiiyuUrl)
+            return
+        }
+
+        // Parse SkyCrypt JSON if successful
+        try {
+            val purseRegex = Regex(""""purse"\s*:\s*([0-9.]+)""")
+            val bankRegex = Regex(""""bank"\s*:\s*([0-9.]+)""")
+            val netWorthRegex = Regex(""""networth"\s*:\s*([0-9.]+)""")
+            
+            val purse = purseRegex.find(jsonResponse)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+            val bank = bankRegex.find(jsonResponse)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+            val netWorth = netWorthRegex.find(jsonResponse)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+
+            val urlParts = shiiyuUrl.trim().split("/")
+            val profileName = urlParts.getOrNull(5) ?: urlParts.getOrNull(4) ?: "Unknown"
+            val profileId = "shiiyu-profile"
+
+            val coopProfile = CoopProfile(
+                profileId = profileId,
+                cuteName = profileName,
+                isSelected = true,
+                coopBankCoins = bank,
+                members = listOf(
+                    CoopMember(
+                        uuid = "shiiyu-$profileName",
+                        purseCoins = purse,
+                        sacksCounts = emptyMap(),
+                        sacksValue = 0.0,
+                        slayerValue = 0.0,
+                        isCurrentPlayer = true
+                    )
+                ),
+                totalCoopCoins = netWorth
+            )
+
+            _coopProfiles.value = listOf(coopProfile)
+            userPrefs.setSelectedProfileId(profileId)
+            userPrefs.updateCachedBalances(purse, bank, 0.0, netWorth)
+        } catch (e: Exception) {
+            // Fallback to HTML parsing if JSON parsing fails
+            fetchFromShiiyuHtml(shiiyuUrl)
+        }
+    }
+
+    private suspend fun fetchFromShiiyuHtml(shiiyuUrl: String) {
         val htmlResponse = try {
             shiiyuApi.getProfile(shiiyuUrl)
         } catch (e: Exception) {
@@ -97,27 +150,23 @@ class AccountRepository(
         val username = nameMatch?.groupValues?.get(1) ?: "Unknown"
 
         // Extract profile name from URL or HTML
-        // URL format: https://sky.shiiyu.moe/stats/USERNAME/PROFILE
         val urlParts = shiiyuUrl.trim().split("/")
         val profileName = urlParts.getOrNull(5) ?: try {
-            // Try to extract profile name from HTML if not in URL
             val profileRegex = Regex(""""profile":"\{[^}]*"cute_name":"([^"]+)"""")
             val profileMatch = profileRegex.find(htmlResponse)
             profileMatch?.groupValues?.get(1)
         } catch (e: Exception) {
             null
-        } ?: username // Fallback to username if profile name not found
+        } ?: username
 
         // Try multiple patterns to extract net worth
         val netWorth = try {
-            // Pattern 1: From description
             val descRegex = Regex("""description:"[^"]+ Networth: ([^,]+)""")
             val descMatch = descRegex.find(htmlResponse)
             descMatch?.groupValues?.get(1)?.let { parseNetWorth(it) }
         } catch (e: Exception) {
             null
         } ?: try {
-            // Pattern 2: Look for "Networth:" anywhere in the HTML
             val netWorthRegex = Regex("""Networth:\s*([0-9.,]+[BKM])""")
             val nwMatch = netWorthRegex.find(htmlResponse)
             nwMatch?.groupValues?.get(1)?.let { parseNetWorth(it) }
@@ -125,18 +174,14 @@ class AccountRepository(
             null
         } ?: 0.0
 
-        val market = bazaarRepo.getAllItems()
-        
-        // For now, use net worth as total since we can't parse individual purse/bank/sacks from HTML
         val purse = 0.0
         val bank = 0.0
         val sacks = emptyMap<String, Long>()
-
         val profileId = "shiiyu-profile"
 
         val coopProfile = CoopProfile(
             profileId = profileId,
-            cuteName = profileName, // Use profile name instead of username
+            cuteName = profileName,
             isSelected = true,
             coopBankCoins = bank,
             members = listOf(
@@ -149,7 +194,7 @@ class AccountRepository(
                     isCurrentPlayer = true
                 )
             ),
-            totalCoopCoins = netWorth // Use net worth instead of purse + bank
+            totalCoopCoins = netWorth
         )
 
         _coopProfiles.value = listOf(coopProfile)
