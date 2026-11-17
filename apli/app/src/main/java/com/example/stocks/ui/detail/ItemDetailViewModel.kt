@@ -2,31 +2,33 @@ package com.example.stocks.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.stocks.data.local.db.PriceAlertEntity
 import com.example.stocks.data.local.db.TransactionType
 import com.example.stocks.data.repository.BazaarRepository
 import com.example.stocks.data.repository.PortfolioRepository
 import com.example.stocks.domain.model.BazaarItem
 import com.example.stocks.domain.model.PricePoint
+import com.example.stocks.domain.model.SlayerCatalog
+import com.example.stocks.ui.components.ChartTimeRange
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class ItemDetailUiState(
     val item: BazaarItem? = null,
+    val categorySubtitle: String = "Bazaar Commodity",
     val history: List<PricePoint> = emptyList(),
+    val selectedTimeRange: ChartTimeRange = ChartTimeRange.ONE_WEEK,
     val changePct: Double = 0.0,
     val minPrice: Double = 0.0,
     val maxPrice: Double = 0.0,
     val isWatched: Boolean = false,
+    val existingAlert: PriceAlertEntity? = null,
+    val flipNetMargin: Double = 0.0,
+    val flipRoiPct: Double = 0.0,
+    val flipHourlyProfit: Double = 0.0,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val selectedTimeRange: TimeRange = TimeRange.WEEK,
 )
-
-enum class TimeRange(val displayName: String) {
-    DAY("1D"),
-    WEEK("1W"),
-    MONTH("1M")
-}
 
 class ItemDetailViewModel(
     private val itemTag: String,
@@ -36,17 +38,10 @@ class ItemDetailViewModel(
 
     private val _uiState = MutableStateFlow(ItemDetailUiState())
     val uiState: StateFlow<ItemDetailUiState> = _uiState.asStateFlow()
-    private val _allItems = MutableStateFlow<Map<String, BazaarItem>>(emptyMap())
-    val allItems: StateFlow<Map<String, BazaarItem>> = _allItems.asStateFlow()
 
     init {
-        load()
+        load(ChartTimeRange.ONE_WEEK)
         observeWatchlistState()
-        loadAllItems()
-    }
-
-    private fun loadAllItems() = viewModelScope.launch {
-        runCatching { _allItems.value = bazaarRepo.getAllItems() }
     }
 
     private fun observeWatchlistState() = viewModelScope.launch {
@@ -56,36 +51,44 @@ class ItemDetailViewModel(
         }
     }
 
-    fun load() = viewModelScope.launch {
-        _uiState.update { it.copy(isLoading = true, error = null) }
+    fun load(range: ChartTimeRange = _uiState.value.selectedTimeRange) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true, selectedTimeRange = range, error = null) }
         runCatching {
             val item = bazaarRepo.getItem(itemTag)
-            val watched = portfolioRepo.isWatched(itemTag)
-            _uiState.update { it.copy(item = item, isWatched = watched) }
-            loadHistory()
-        }.onFailure { e ->
-            _uiState.update { it.copy(isLoading = false, error = e.message) }
-        }
-    }
-
-    fun loadHistory() = viewModelScope.launch {
-        _uiState.update { it.copy(isLoading = true) }
-        runCatching {
-            val history = when (_uiState.value.selectedTimeRange) {
-                TimeRange.DAY -> bazaarRepo.getDayHistory(itemTag)
-                TimeRange.WEEK -> bazaarRepo.getWeekHistory(itemTag)
-                TimeRange.MONTH -> bazaarRepo.getMonthHistory(itemTag)
+            val history = if (range == ChartTimeRange.ONE_DAY) {
+                bazaarRepo.getDayHistory(itemTag)
+            } else {
+                bazaarRepo.getWeekHistory(itemTag)
             }
+
             val prices = history.map { it.sellPrice }
             val first = history.firstOrNull()?.sellPrice ?: 0.0
-            val last = history.lastOrNull()?.sellPrice ?: 0.0
+            val last = history.lastOrNull()?.sellPrice ?: (item?.sellPrice ?: 0.0)
             val change = if (first > 0) ((last - first) / first) * 100.0 else 0.0
+            val watched = portfolioRepo.isWatched(itemTag)
+            val alert = portfolioRepo.getPriceAlert(itemTag)
+
+            // Flipper Profit calculations (1.125% Bazaar tax)
+            val netSell = (item?.buyPrice ?: 0.0) * 0.98875
+            val margin = (netSell - (item?.sellPrice ?: 0.0)).coerceAtLeast(0.0)
+            val roi = if ((item?.sellPrice ?: 0.0) > 0) (margin / item!!.sellPrice) * 100.0 else 0.0
+            val hourlyVol = ((item?.sellMovingWeek ?: 0L) / (7 * 24)).coerceAtLeast(0)
+            val hourlyCoins = margin * kotlin.math.min(hourlyVol, 71_680L)
+
             _uiState.update {
-                it.copy(
+                ItemDetailUiState(
+                    item = item,
+                    categorySubtitle = SlayerCatalog.getCategory(itemTag),
                     history = history,
+                    selectedTimeRange = range,
                     changePct = change,
                     minPrice = prices.minOrNull() ?: 0.0,
                     maxPrice = prices.maxOrNull() ?: 0.0,
+                    isWatched = watched,
+                    existingAlert = alert,
+                    flipNetMargin = margin,
+                    flipRoiPct = roi,
+                    flipHourlyProfit = hourlyCoins,
                     isLoading = false,
                 )
             }
@@ -94,14 +97,15 @@ class ItemDetailViewModel(
         }
     }
 
-    fun setTimeRange(range: TimeRange) {
-        _uiState.update { it.copy(selectedTimeRange = range) }
-        loadHistory()
-    }
-
     fun toggleWatchlist() = viewModelScope.launch {
         val newStatus = portfolioRepo.toggleWatchlist(itemTag)
         _uiState.update { it.copy(isWatched = newStatus) }
+    }
+
+    fun setPriceAlert(high: Double, low: Double) = viewModelScope.launch {
+        portfolioRepo.setPriceAlert(itemTag, high, low)
+        val alert = portfolioRepo.getPriceAlert(itemTag)
+        _uiState.update { it.copy(existingAlert = alert) }
     }
 
     fun recordTrade(type: TransactionType, quantity: Long, price: Double, notes: String = "") = viewModelScope.launch {

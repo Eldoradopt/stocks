@@ -5,9 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
@@ -43,6 +43,7 @@ private fun SkyBlockMainContent() {
 
     val bottomNavItems = listOf(
         Triple(Screen.Portfolio, "Bank", Icons.Default.AccountBalance),
+        Triple(Screen.Flipper,   "Flipper", Icons.Default.AutoGraph),
         Triple(Screen.Watchlist, "Watchlist", Icons.Default.TrendingUp),
         Triple(Screen.Search,    "Search", Icons.Default.Search),
     )
@@ -81,7 +82,7 @@ private fun SkyBlockMainContent() {
                 }
             }
         }
-    ) { padding ->
+    ) { _ ->
         AppNavGraph(navController = navController)
     }
 }

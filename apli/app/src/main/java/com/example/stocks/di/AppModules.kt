@@ -10,6 +10,7 @@ import com.example.stocks.data.repository.AccountRepository
 import com.example.stocks.data.repository.BazaarRepository
 import com.example.stocks.data.repository.PortfolioRepository
 import com.example.stocks.ui.detail.ItemDetailViewModel
+import com.example.stocks.ui.flipper.FlipperViewModel
 import com.example.stocks.ui.portfolio.PortfolioViewModel
 import com.example.stocks.ui.search.SearchViewModel
 import com.example.stocks.ui.watchlist.WatchlistViewModel
@@ -88,18 +89,20 @@ val databaseModule = module {
     single { get<AppDatabase>().holdingDao() }
     single { get<AppDatabase>().watchlistDao() }
     single { get<AppDatabase>().transactionDao() }
+    single { get<AppDatabase>().priceAlertDao() }
     single { UserPreferencesRepository(androidContext()) }
 }
 
 val repositoryModule = module {
     single { BazaarRepository(get(), get()) }
-    single { PortfolioRepository(get(), get(), get(), get()) }
+    single { PortfolioRepository(get(), get(), get(), get(), get(), androidContext()) }
     single { AccountRepository(get(), get(), get(), get()) }
 }
 
 val viewModelModule = module {
     viewModel { PortfolioViewModel(get(), get(), get()) }
     viewModel { WatchlistViewModel(get(), get()) }
+    viewModel { FlipperViewModel(get()) }
     viewModel { (tag: String) -> ItemDetailViewModel(tag, get(), get()) }
     viewModel { SearchViewModel(get(), get()) }
 }

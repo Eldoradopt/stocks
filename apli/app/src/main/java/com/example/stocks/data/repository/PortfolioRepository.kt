@@ -1,26 +1,29 @@
 package com.example.stocks.data.repository
 
+import android.content.Context
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.stocks.data.local.db.*
 import com.example.stocks.domain.model.BazaarItem
 import com.example.stocks.domain.model.Holding
+import com.example.stocks.worker.BazaarAlertWorker
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.TimeUnit
 
 class PortfolioRepository(
     private val holdingDao: HoldingDao,
     private val watchlistDao: WatchlistDao,
     private val transactionDao: TransactionDao,
+    private val priceAlertDao: PriceAlertDao,
     private val bazaarRepository: BazaarRepository,
+    private val context: Context,
 ) {
     // ---- Holdings ----
 
     fun observeHoldings(): Flow<List<HoldingEntity>> = holdingDao.observeAll()
 
-    /**
-     * Combines stored holdings with live Bazaar prices to produce
-     * domain Holding objects with current P&L.
-     */
     fun observeLiveHoldings(): Flow<List<Holding>> =
         holdingDao.observeAll().map { entities ->
             val market = runCatching { bazaarRepository.getAllItems() }.getOrDefault(emptyMap())
@@ -35,11 +38,6 @@ class PortfolioRepository(
             }
         }
 
-    /**
-     * Record a manual BUY trade:
-     * - Adds/updates Room holding (weighted average buy price)
-     * - Inserts transaction into transactions table
-     */
     suspend fun recordBuy(tag: String, quantity: Long, pricePerUnit: Double, notes: String = "") {
         val existing = holdingDao.getByTag(tag)
         val newQuantity: Long
@@ -66,11 +64,6 @@ class PortfolioRepository(
         )
     }
 
-    /**
-     * Record a manual SELL trade:
-     * - Decreases Room holding (or deletes if quantity reaches 0)
-     * - Inserts transaction into transactions table
-     */
     suspend fun recordSell(tag: String, quantity: Long, pricePerUnit: Double, notes: String = "") {
         val existing = holdingDao.getByTag(tag) ?: return
         val remaining = (existing.quantity - quantity).coerceAtLeast(0)
@@ -98,13 +91,37 @@ class PortfolioRepository(
 
     suspend fun removeHolding(tag: String) = holdingDao.deleteByTag(tag)
 
-    // ---- Transactions History / Statement ----
+    // ---- Transactions History ----
 
     fun observeRecentTransactions(limit: Int = 10): Flow<List<TransactionEntity>> =
         transactionDao.observeRecent(limit)
 
-    fun observeAllTransactions(): Flow<List<TransactionEntity>> =
-        transactionDao.observeAll()
+    // ---- Price Alerts & Notifications ----
+
+    suspend fun setPriceAlert(tag: String, high: Double, low: Double) {
+        priceAlertDao.upsertAlert(
+            PriceAlertEntity(
+                itemTag = tag,
+                targetHighPrice = high,
+                targetLowPrice = low,
+                isEnabled = true
+            )
+        )
+        // Schedule periodic background check
+        val workRequest = PeriodicWorkRequestBuilder<BazaarAlertWorker>(15, TimeUnit.MINUTES)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "bazaar_price_checker",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+    }
+
+    suspend fun getPriceAlert(tag: String): PriceAlertEntity? =
+        priceAlertDao.getAlertByTag(tag)
+
+    suspend fun deletePriceAlert(tag: String) =
+        priceAlertDao.deleteAlert(tag)
 
     // ---- Watchlist ----
 

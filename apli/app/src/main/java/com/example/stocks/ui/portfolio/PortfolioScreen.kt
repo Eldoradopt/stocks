@@ -14,14 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.stocks.data.local.db.TransactionEntity
 import com.example.stocks.data.local.db.TransactionType
+import com.example.stocks.domain.model.CoopProfile
 import com.example.stocks.domain.model.Holding
+import com.example.stocks.domain.model.SacksBreakdown
 import com.example.stocks.ui.components.ChangeBadge
 import com.example.stocks.ui.components.LinkAccountSheet
 import com.example.stocks.ui.components.LogTradeSheet
@@ -75,7 +76,6 @@ fun PortfolioScreen(
                     }
                 },
                 actions = {
-                    // Balance Privacy Eye Toggle
                     IconButton(onClick = viewModel::toggleHideBalance) {
                         Icon(
                             imageVector = if (isHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
@@ -94,6 +94,27 @@ fun PortfolioScreen(
             contentPadding = padding,
             modifier = Modifier.fillMaxSize()
         ) {
+            // Co-op / Profile Switcher Chips
+            if (state.coopProfiles.size > 1) {
+                item {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.coopProfiles) { profile ->
+                            val isSelected = profile.profileId == state.userSettings.selectedProfileId
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.switchProfile(profile.profileId) },
+                                label = { Text("🌿 ${profile.cuteName} (Co-op)") }
+                            )
+                        }
+                    }
+                }
+            }
+
             // 1. Hero Net Worth Card
             item {
                 BankHeroCard(
@@ -114,16 +135,28 @@ fun PortfolioScreen(
                 )
             }
 
-            // 3. Asset Distribution Breakdown
+            // 3. Asset Breakdown Card (Purse + Bank + Sacks + Bazaar)
             item {
                 AssetBreakdownCard(
                     purseCoins = formatBalance(state.purseCoins),
                     bankCoins = formatBalance(state.bankCoins),
+                    sacksCoins = formatBalance(state.sacksCoins),
                     investments = formatBalance(state.bazaarCurrentValue),
                 )
             }
 
-            // 4. Holdings Section
+            // 4. Sacks & Slayer Items Valuation Stash
+            state.sacksBreakdown?.let { sacks ->
+                item {
+                    SacksValuationCard(
+                        sacks = sacks,
+                        isHidden = isHidden,
+                        onItemClick = onItemClick
+                    )
+                }
+            }
+
+            // 5. Holdings Section
             item {
                 Row(
                     modifier = Modifier
@@ -133,12 +166,12 @@ fun PortfolioScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "My Holdings",
+                        "Bazaar Holdings",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${state.holdings.size} assets",
+                        "${state.holdings.size} positions",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -148,8 +181,8 @@ fun PortfolioScreen(
             if (state.holdings.isEmpty()) {
                 item {
                     EmptySectionPlaceholder(
-                        title = "No active investments",
-                        subtitle = "Tap '+ Log Trade' to add an item you bought or held.",
+                        title = "No manual investments logged",
+                        subtitle = "Tap '+ Log Trade' to add items you are holding or flipping.",
                         onAction = { showTradeSheet = true }
                     )
                 }
@@ -163,7 +196,7 @@ fun PortfolioScreen(
                 }
             }
 
-            // 5. Recent Transaction History / Statement
+            // 6. Recent Transaction History
             item {
                 Spacer(Modifier.height(16.dp))
                 Row(
@@ -174,7 +207,7 @@ fun PortfolioScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Recent Statement",
+                        "Trade Ledger / Statements",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -184,7 +217,7 @@ fun PortfolioScreen(
             if (state.recentTransactions.isEmpty()) {
                 item {
                     Text(
-                        "No transactions logged yet.",
+                        "No trades logged yet.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -368,6 +401,7 @@ private fun QuickActionButton(
 private fun AssetBreakdownCard(
     purseCoins: String,
     bankCoins: String,
+    sacksCoins: String,
     investments: String,
 ) {
     Card(
@@ -380,12 +414,99 @@ private fun AssetBreakdownCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             AssetColumn("👛 Purse", purseCoins)
             AssetColumn("🏦 Bank", bankCoins)
-            AssetColumn("📈 Investments", investments)
+            AssetColumn("🎒 Sacks", sacksCoins)
+            AssetColumn("📈 Portfolio", investments)
+        }
+    }
+}
+
+@Composable
+private fun SacksValuationCard(
+    sacks: SacksBreakdown,
+    isHidden: Boolean,
+    onItemClick: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .border(1.dp, DarkCardBorder, CardDefaults.shape),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "🎒 Sacks & Slayer Stash",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (isHidden) "••••" else "${sacks.totalSacksValue.toSkyCoins()} coins",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = HypixelGold
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Divider(color = DarkCardBorder)
+            Spacer(Modifier.height(10.dp))
+
+            // Sub-category totals
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("⚔️ Slayer Stash", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (isHidden) "••••" else sacks.slayerDropsValue.toSkyCoins(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                }
+                Column {
+                    Text("💎 Gemstones", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (isHidden) "••••" else sacks.gemstonesValue.toSkyCoins(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("🌾 Farming", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (isHidden) "••••" else sacks.farmingValue.toSkyCoins(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            if (sacks.topValuedItems.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Most Valuable Items:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+
+                sacks.topValuedItems.take(4).forEach { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .clickable { onItemClick(item.tag) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${item.quantity}x ${item.displayName}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            if (isHidden) "••••" else "${item.totalValue.toSkyCoins()} coins",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = HypixelGold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -395,7 +516,7 @@ private fun AssetColumn(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = HypixelGold)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = HypixelGold)
     }
 }
 
@@ -463,7 +584,6 @@ private fun TransactionRowItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Type Pill
             Surface(
                 color = if (isBuy) EmeraldProfit.copy(alpha = 0.2f) else CrimsonLoss.copy(alpha = 0.2f),
                 shape = MaterialTheme.shapes.extraSmall,

@@ -8,7 +8,9 @@ import com.example.stocks.data.local.db.TransactionType
 import com.example.stocks.data.repository.AccountRepository
 import com.example.stocks.data.repository.BazaarRepository
 import com.example.stocks.data.repository.PortfolioRepository
+import com.example.stocks.domain.model.CoopProfile
 import com.example.stocks.domain.model.Holding
+import com.example.stocks.domain.model.SacksBreakdown
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -16,6 +18,8 @@ data class BankDashboardUiState(
     val holdings: List<Holding> = emptyList(),
     val recentTransactions: List<TransactionEntity> = emptyList(),
     val userSettings: UserSettings = UserSettings(),
+    val coopProfiles: List<CoopProfile> = emptyList(),
+    val sacksBreakdown: SacksBreakdown? = null,
     val bazaarInvestedCost: Double = 0.0,
     val bazaarCurrentValue: Double = 0.0,
     val bazaarUnrealizedPnL: Double = 0.0,
@@ -23,6 +27,7 @@ data class BankDashboardUiState(
     // Bank & Consolidated stats:
     val purseCoins: Double = 0.0,
     val bankCoins: Double = 0.0,
+    val sacksCoins: Double = 0.0,
     val totalNetWorth: Double = 0.0,
     val isLinkingAccount: Boolean = false,
     val linkAccountError: String? = null,
@@ -50,9 +55,11 @@ class PortfolioViewModel(
         portfolioRepo.observeLiveHoldings(),
         portfolioRepo.observeRecentTransactions(10),
         accountRepo.userSettings,
+        accountRepo.coopProfiles,
+        accountRepo.currentSacksBreakdown,
         _isLinking,
         _linkError,
-    ) { holdings, transactions, settings, linking, error ->
+    ) { holdings, transactions, settings, profiles, sacks, linking, error ->
         val invested = holdings.sumOf { it.costBasis }
         val bazaarValue = holdings.sumOf { it.currentValue }
         val pnl = bazaarValue - invested
@@ -60,27 +67,42 @@ class PortfolioViewModel(
 
         val purse = settings.cachedPurseCoins
         val bank = settings.cachedBankCoins
-        val netWorth = purse + bank + bazaarValue
+        val sacksVal = sacks?.totalSacksValue ?: settings.cachedSacksCoins
+        val netWorth = purse + bank + sacksVal + bazaarValue
 
         BankDashboardUiState(
             holdings = holdings,
             recentTransactions = transactions,
             userSettings = settings,
+            coopProfiles = profiles,
+            sacksBreakdown = sacks,
             bazaarInvestedCost = invested,
             bazaarCurrentValue = bazaarValue,
             bazaarUnrealizedPnL = pnl,
             bazaarReturnPct = returnPct,
             purseCoins = purse,
             bankCoins = bank,
+            sacksCoins = sacksVal,
             totalNetWorth = netWorth,
             isLinkingAccount = linking,
             linkAccountError = error,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BankDashboardUiState())
 
+    init {
+        // Auto refresh account on start if linked
+        viewModelScope.launch {
+            accountRepo.refreshLinkedAccount()
+        }
+    }
+
     fun toggleHideBalance() = viewModelScope.launch {
         val current = uiState.value.userSettings.isBalanceHidden
         accountRepo.toggleHideBalance(!current)
+    }
+
+    fun switchProfile(profileId: String) = viewModelScope.launch {
+        accountRepo.switchProfile(profileId)
     }
 
     fun recordBuy(tag: String, quantity: Long, price: Double, notes: String = "") = viewModelScope.launch {

@@ -14,8 +14,10 @@ data class UserSettings(
     val linkedIgn: String = "",
     val linkedUuid: String = "",
     val hypixelApiKey: String = "",
+    val selectedProfileId: String = "",
     val cachedPurseCoins: Double = 0.0,
     val cachedBankCoins: Double = 0.0,
+    val cachedSacksCoins: Double = 0.0,
     val lastSyncTimestamp: Long = 0L,
 )
 
@@ -26,8 +28,10 @@ class UserPreferencesRepository(private val context: Context) {
         val LINKED_IGN = stringPreferencesKey("linked_ign")
         val LINKED_UUID = stringPreferencesKey("linked_uuid")
         val HYPIXEL_API_KEY = stringPreferencesKey("hypixel_api_key")
+        val SELECTED_PROFILE_ID = stringPreferencesKey("selected_profile_id")
         val CACHED_PURSE_COINS = doublePreferencesKey("cached_purse_coins")
         val CACHED_BANK_COINS = doublePreferencesKey("cached_bank_coins")
+        val CACHED_SACKS_COINS = doublePreferencesKey("cached_sacks_coins")
         val LAST_SYNC_TIMESTAMP = longPreferencesKey("last_sync_timestamp")
     }
 
@@ -37,10 +41,18 @@ class UserPreferencesRepository(private val context: Context) {
             linkedIgn = preferences[PreferencesKeys.LINKED_IGN] ?: "",
             linkedUuid = preferences[PreferencesKeys.LINKED_UUID] ?: "",
             hypixelApiKey = preferences[PreferencesKeys.HYPIXEL_API_KEY] ?: "",
+            selectedProfileId = preferences[PreferencesKeys.SELECTED_PROFILE_ID] ?: "",
             cachedPurseCoins = preferences[PreferencesKeys.CACHED_PURSE_COINS] ?: 0.0,
             cachedBankCoins = preferences[PreferencesKeys.CACHED_BANK_COINS] ?: 0.0,
+            cachedSacksCoins = preferences[PreferencesKeys.CACHED_SACKS_COINS] ?: 0.0,
             lastSyncTimestamp = preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] ?: 0L,
         )
+    }
+
+    suspend fun setSelectedProfileId(profileId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTED_PROFILE_ID] = profileId
+        }
     }
 
     suspend fun setBalanceHidden(hidden: Boolean) {
@@ -64,16 +76,19 @@ class UserPreferencesRepository(private val context: Context) {
             preferences.remove(PreferencesKeys.LINKED_IGN)
             preferences.remove(PreferencesKeys.LINKED_UUID)
             preferences.remove(PreferencesKeys.HYPIXEL_API_KEY)
+            preferences.remove(PreferencesKeys.SELECTED_PROFILE_ID)
             preferences[PreferencesKeys.CACHED_PURSE_COINS] = 0.0
             preferences[PreferencesKeys.CACHED_BANK_COINS] = 0.0
+            preferences[PreferencesKeys.CACHED_SACKS_COINS] = 0.0
             preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] = 0L
         }
     }
 
-    suspend fun updateCachedBalances(purse: Double, bank: Double) {
+    suspend fun updateCachedBalances(purse: Double, bank: Double, sacks: Double = 0.0) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.CACHED_PURSE_COINS] = purse
             preferences[PreferencesKeys.CACHED_BANK_COINS] = bank
+            preferences[PreferencesKeys.CACHED_SACKS_COINS] = sacks
             preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] = System.currentTimeMillis()
         }
     }

@@ -7,13 +7,15 @@ import androidx.room.RoomDatabase
     entities = [
         HoldingEntity::class,
         WatchlistEntity::class,
-        TransactionEntity::class
+        TransactionEntity::class,
+        PriceAlertEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun holdingDao(): HoldingDao
     abstract fun watchlistDao(): WatchlistDao
     abstract fun transactionDao(): TransactionDao
+    abstract fun priceAlertDao(): PriceAlertDao
 }
